@@ -51,16 +51,30 @@ const coverageLayer = L.geoJSON(window.US_STATES, {
   onEachFeature: (f, layer) => {
     const lv = stateLevel(f.properties.abbr);
     const cities = SOURCES.filter((s) => s.counties && U.stateAt((s.bbox[0] + s.bbox[2]) / 2, (s.bbox[1] + s.bbox[3]) / 2)?.abbr === f.properties.abbr);
-    layer.bindTooltip(
-      `<strong>${U.esc(f.properties.name)}</strong><br>${LEVELS[lv].label}` +
-        (cities.length ? `<br><em>Plus ${cities.map((c) => U.esc(c.region)).join(', ')}: ${LEVELS[cities[0].level].label.toLowerCase()}</em>` : ''),
-      { sticky: true, direction: 'top', className: 'tip' }
-    );
+    let extra = '';
+    if (cities.length > 3) extra = `<br><em>Plus ${cities.length} counties with their own parcel data (shaded)</em>`;
+    else if (cities.length) extra = `<br><em>Plus ${cities.map((c) => U.esc(c.region)).join(', ')}: ${LEVELS[cities[0].level].label.toLowerCase()}</em>`;
+    layer.bindTooltip(`<strong>${U.esc(f.properties.name)}</strong><br>${LEVELS[lv].label}${extra}`, { sticky: true, direction: 'top', className: 'tip' });
   },
 });
 
+/* Counties covered by their own parcel service (drawn on top of the state colours). */
+const countyCoverage = L.geoJSON(
+  {
+    type: 'FeatureCollection',
+    features: SOURCES.filter((s) => s.outline).map((s) => ({ type: 'Feature', properties: { id: s.id }, geometry: { type: 'Polygon', coordinates: s.outline } })),
+  },
+  {
+    style: (f) => ({ color: '#ffffff', weight: 0.6, fillColor: LEVELS[SOURCES.find((s) => s.id === f.properties.id).level].color, fillOpacity: 0.75 }),
+    onEachFeature: (f, layer) => {
+      const s = SOURCES.find((x) => x.id === f.properties.id);
+      layer.bindTooltip(`<strong>${U.esc(s.region)}</strong><br>${LEVELS[s.level].label}`, { sticky: true, direction: 'top', className: 'tip' });
+    },
+  }
+);
+
 const cityMarkers = L.layerGroup(
-  SOURCES.filter((s) => s.counties).map((s) =>
+  SOURCES.filter((s) => s.counties && !s.outline).map((s) =>
     L.circleMarker([(s.bbox[1] + s.bbox[3]) / 2, (s.bbox[0] + s.bbox[2]) / 2], {
       radius: 7,
       color: '#fff',
@@ -75,7 +89,7 @@ let showCoverage = true;
 function updateCoverageVisibility() {
   const z = map.getZoom();
   const on = showCoverage && z < 9;
-  for (const l of [coverageLayer, cityMarkers]) {
+  for (const l of [coverageLayer, countyCoverage, cityMarkers]) {
     if (on && !map.hasLayer(l)) l.addTo(map);
     if (!on && map.hasLayer(l)) map.removeLayer(l);
   }
@@ -659,6 +673,7 @@ function renderSourceBlock(src) {
     <section class="block source">
       <h3>Where this comes from</h3>
       <p><a href="${h(src.homepage)}" target="_blank" rel="noopener">${h(src.name)}</a><br><span class="muted">${h(src.publisher)}</span></p>
+      ${!src.history && src.note ? `<p class="fine">${h(src.note)}</p>` : ''}
       <p class="fine">Public records can be out of date or wrong, and this is not a title search. For anything legal or financial, check the official record.</p>
     </section>`;
 }
@@ -705,6 +720,7 @@ function renderParcel(rec, ownership, ctx, historyState) {
       <div class="owners">${shownOwners.length ? shownOwners.map((o) => `<div class="big">${h(o)}</div>`).join('') : `<div class="big unknown">Not published</div>`}</div>
       ${!shownOwners.length && rec.ownerNote ? `<p class="note">${h(rec.ownerNote)}</p>` : ''}
       ${pendingNote}
+      ${rec.source.asOf ? `<p class="note stale">These records were last updated ${h(rec.source.asOf)}. Newer sales and owner changes may be missing.</p>` : ''}
       <div class="facts">
         ${since ? `<div><span>Owned since</span><strong>${h(since)}</strong></div>` : ''}
         ${paid ? `<div><span>Bought for</span><strong>${h(paid)}</strong></div>` : ''}
@@ -734,6 +750,8 @@ function renderNoParcel(ctx) {
   let msg;
   if (failed && ctx.failures.length === ctx.candidates.length) {
     msg = `<p>The parcel service for this area (${ctx.failures.map((s) => h(s.name)).join(', ')}) didn’t respond. Government map servers go down now and then, so try again in a minute.</p>`;
+  } else if (hasSource && ctx.candidates.every((s) => s.partial)) {
+    msg = `<p>The free parcel layer for ${h(where)} only covers part of the county, and this spot isn’t in it. The county’s records offices (links below) have every parcel.</p>`;
   } else if (hasSource) {
     msg = `<p>No parcel at this exact spot. Roads, rivers and rights-of-way usually aren’t parcels. Try clicking inside a lot.</p>`;
   } else {
@@ -866,9 +884,24 @@ function renderAbout() {
         </tr>`
       )
       .join('');
+  // Counties described as data (Michigan, Iowa, …) are grouped into one row per state.
+  const grouped = {};
+  for (const s of SOURCES.filter((x) => x.outline)) (grouped[s.region.split(', ').pop()] ||= []).push(s);
+  const groupRows = Object.entries(grouped)
+    .map(([st, list]) => {
+      const withSales = list.filter((s) => s.level === 'sales').length;
+      return `<tr>
+        <td><span class="swatch" style="background:${LEVELS.owner.color}"></span>${h(U.stateName(st))}<div class="muted">${list.length} counties</div></td>
+        <td>Each county’s own public parcel service: owner names${withSales ? `, plus the latest sale in ${withSales} of them` : ''}.
+          <div class="countylist">${list
+            .map((s) => `<a href="${h(s.homepage)}" target="_blank" rel="noopener" title="${h(s.publisher)}">${h(s.region.split(' County')[0])}</a>${s.partial ? ' <span class="muted">(part)</span>' : ''}`)
+            .join(', ')}</div></td>
+      </tr>`;
+    })
+    .join('');
   $('#sourceTable').innerHTML = `
     <thead><tr><th>Area</th><th>Source and what it includes</th></tr></thead>
-    <tbody>${rows((s) => s.counties)}${rows((s) => s.states)}</tbody>`;
+    <tbody>${rows((s) => s.counties && !s.outline)}${groupRows}${rows((s) => s.states)}</tbody>`;
   $('#legendAbout').innerHTML = Object.values(LEVELS)
     .map((l) => `<li><span class="swatch" style="background:${l.color}"></span>${h(l.label)}</li>`)
     .join('');

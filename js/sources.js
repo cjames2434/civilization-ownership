@@ -694,6 +694,105 @@ const LEVELS = {
   none: { label: 'No free parcel data (public lands only)', color: '#d9d4c7' },
 };
 
+/*
+ * County sources described as data (js/counties-*.js) instead of code. Each entry gives the
+ * service URL and which of its fields hold the owner, parcel ID, address, size and last sale:
+ *
+ *   { id, st, county, fips, url, publisher, bbox, outline,
+ *     f: { owner: [...], id: [...], addr: [...], city: [...], acres: [...], sqft: [...],
+ *          saleDate: [...], salePrice: [...], link: 'FIELD', details: [[field, label, 'money'?], ...] } }
+ */
+/* Standard property classes: Michigan uses 3-digit codes (401 = residential, improved), Iowa uses letters. */
+const MI_CLASS = { 1: 'Agricultural', 2: 'Commercial', 3: 'Industrial', 4: 'Residential', 5: 'Timber-cutover', 6: 'Developmental', 7: 'Exempt' };
+const IA_CLASS = { A: 'Agricultural', R: 'Residential', C: 'Commercial', I: 'Industrial', M: 'Multi-residential', E: 'Exempt', U: 'Utility', RR: 'Railroad' };
+function describeClass(st, v) {
+  const s = String(v).trim();
+  if (st === 'MI' && /^[1-7]0[0-9]$/.test(s)) {
+    const kind = s.endsWith('01') ? ', improved' : s.endsWith('02') ? ', vacant' : '';
+    return `${MI_CLASS[s[0]]}${kind} (${s})`;
+  }
+  if (st === 'IA' && IA_CLASS[s.toUpperCase()]) return `${IA_CLASS[s.toUpperCase()]} (${s})`;
+  return s;
+}
+/* Some services store text base64-encoded; decode it when it clearly is. */
+function maybeBase64(v) {
+  const s = String(v).trim();
+  if (s.length < 16 || s.length % 4 || /\s/.test(s) || !/^[A-Za-z0-9+/]+={0,2}$/.test(s) || /^\d+$/.test(s)) return s;
+  try {
+    const d = atob(s);
+    return /^[\x20-\x7e]+$/.test(d) ? d.trim() : s;
+  } catch {
+    return s;
+  }
+}
+const GUID_RE = /^\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?$/i;
+
+function fromFieldMap(c) {
+  const f = c.f;
+  const first = (a, list, ok = () => true) => {
+    for (const k of list || []) if (U.clean(a[k]) !== null && ok(String(a[k]).trim())) return a[k];
+    return null;
+  };
+  const stateName = { MI: 'Michigan', IA: 'Iowa' }[c.st] || c.st;
+  const hasDate = !!(f.saleDate && f.saleDate.length);
+  const hasSale = hasDate || (f.salePrice && f.salePrice.length);
+  const by = c.publisher ? ` (published by ${c.publisher})` : '';
+  let note = hasSale
+    ? `Current owner and most recent sale from a public parcel service${by}.`
+    : `Current owner from a public parcel service${by}. No sale history is published there.`;
+  if (c.partial) note += ` This layer covers only part of ${c.county} County${c.partial === true ? '' : ` (${c.partial})`}.`;
+  if (c.asOf) note += ` Its records are as of ${c.asOf}, so newer sales and owners may be missing.`;
+  return {
+    id: c.id,
+    name: `${c.county} County, ${stateName} parcels${c.partial ? ' (partial)' : ''}`,
+    publisher: c.publisher || `${c.county} County, ${stateName}`,
+    homepage: c.home || c.url,
+    region: `${c.county} County, ${c.st}`,
+    bbox: c.bbox,
+    outline: c.outline,
+    partial: c.partial || false,
+    asOf: c.asOf || null,
+    counties: [c.fips],
+    level: hasSale ? 'sales' : 'owner',
+    type: 'arcgis',
+    url: c.url,
+    note,
+    normalize(a) {
+      let addr = U.clean(first(a, f.addr));
+      if (!addr && f.addrParts) {
+        const parts = f.addrParts.map((k) => U.clean(a[k])).filter(Boolean);
+        addr = parts.length === f.addrParts.length ? parts.join(' ') : null;
+      }
+      const acres = S.num(first(a, f.acres));
+      const sqft = S.num(first(a, f.sqft));
+      const linkVal = f.link ? String(a[f.link] || '') : '';
+      const details = (f.details || []).map(([k, label, kind]) => {
+        if (kind === 'money') return [label, S.money(a[k])];
+        const v = U.clean(a[k]);
+        if (v === null) return [label, null];
+        return [label, label === 'Property class' ? describeClass(c.st, v) : maybeBase64(v)];
+      });
+      // A sale price with no date can't go on the timeline, so show it as a detail.
+      if (!hasDate && f.salePrice) details.unshift(['Last sale price', S.money(first(a, f.salePrice))]);
+      return {
+        owners: S.owners(...(f.owner || []).map((k) => a[k])),
+        ownerLabel: f.ownerLabel || null,
+        parcelId: U.clean(first(a, f.id, (v) => !GUID_RE.test(v))),
+        address: addr && /[A-Za-z]/.test(addr) ? addr : null,
+        place: (U.clean(first(a, f.city, (v) => /[A-Za-z]{3}/.test(v) && !/^,/.test(v))) || '')
+          .replace(/,?\s*(MI|IA|Michigan|Iowa)\.?\s*(\d{5}(-\d{4})?)?\s*$/i, '')
+          .replace(/,?\s*\d{5}(-\d{4})?\s*$/, '') || null,
+        acres: acres || (sqft ? sqft / 43560 : null),
+        acresLabel: acres || sqft ? 'county record' : null,
+        sales: hasDate ? S.sales(S.sale(first(a, f.saleDate), first(a, f.salePrice), { sellers: S.owners(first(a, f.seller)) })) : [],
+        link: /^https?:\/\//i.test(linkVal) ? { url: linkVal, label: `${c.county} County property record` } : null,
+        details,
+      };
+    },
+  };
+}
+if (window.COUNTY_SOURCES) SOURCES.unshift(...window.COUNTY_SOURCES.map(fromFieldMap));
+
 /* Precompute coverage boxes. */
 for (const s of SOURCES) {
   if (!s.bbox && s.states) {

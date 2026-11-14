@@ -70,6 +70,7 @@ Land records in the U.S. are kept by about 3,100 county offices, and each state 
 | **Owners + latest sale** | Massachusetts, Colorado, Minnesota (opt-in counties), North Carolina (sale date), Washington DC |
 | **Owner names** | Wisconsin, Texas, Florida, Montana, Vermont, Arkansas, Franklin County OH (Columbus) |
 | **Property lines only** | Washington State (links to county assessor), Indiana, Virginia, Utah, Delaware, New Jersey (owner names redacted by law; deed date + price still shown) |
+| **County by county** | Michigan and Iowa have no statewide layer, so the map reads each county's own public parcel service where one exists: **39 of 83 Michigan counties** (8 cover only part of the county, such as one city) and **26 of 99 Iowa counties** (3 partial). Owner names everywhere, plus the latest sale in 13 counties. Layers not updated in over a year are labeled with their date on every parcel. The **About the data** window lists every county. |
 | **Public land only** | Everywhere else, via USGS PAD-US, plus links to the county's records |
 
 Things to know:
@@ -83,7 +84,11 @@ Things to know:
 
 ## Add more counties or states
 
-Every data source is one entry in [`js/sources.js`](js/sources.js). Many counties publish an **ArcGIS REST** parcel layer (search the web for `"<county name> parcels FeatureServer"` or `"MapServer"`). To add one:
+**Asking a county for its data.** Contact the office that keeps the parcel map. In Michigan that's usually **Equalization** or **GIS**; in Iowa it's the **Auditor** or **Assessor**. Deed history lives with the **Register of Deeds** (MI) or **County Recorder** (IA). The easiest thing to add is a public map-service URL ending in `/FeatureServer/0` or `/MapServer/0` that includes owner names and allows cross-origin (CORS) requests. A downloaded file (shapefile or geodatabase) also works but becomes a frozen copy, so check the county allows it on a public website.
+
+**Simple county entries.** Counties in [`js/counties-mi-ia.js`](js/counties-mi-ia.js) are one line of data each: the service `url` plus which fields hold the owner, parcel ID, address, acres, and sale date/price (see `fromFieldMap()` in `js/sources.js`). Copy a line, change the URL, FIPS code and field names, and reload.
+
+**Full entries.** Every other data source is one entry in [`js/sources.js`](js/sources.js). Many counties publish an **ArcGIS REST** parcel layer (search the web for `"<county name> parcels FeatureServer"` or `"MapServer"`). To add one:
 
 1. Open the layer URL with `?f=json` on the end and note the field names (owner, parcel ID, acres, sale date, sale price).
 2. Copy an existing entry with `type: 'arcgis'` (Wisconsin is a simple one), set:
@@ -107,6 +112,7 @@ index.html          the page
 css/style.css       styles (light/dark, desktop/phone)
 js/util.js          dates, money, area math, HTTP helpers
 js/sources.js       parcel data sources (edit this to add places)
+js/counties-mi-ia.js  Michigan + Iowa county services, one line of data each
 js/history.js       deed/sales history sources + ownership timeline logic
 js/app.js           map, property lines, click lookup, panel, search
 data/states.js      simplified state outlines (U.S. Census)
