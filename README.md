@@ -70,12 +70,13 @@ Land records in the U.S. are kept by about 3,100 county offices, and each state 
 | **Owners + latest sale** | Massachusetts, Colorado, Minnesota (opt-in counties), North Carolina (sale date), Washington DC |
 | **Owner names** | Wisconsin, Texas, Florida, Montana, Vermont, Arkansas, Franklin County OH (Columbus) |
 | **Property lines only** | Washington State (links to county assessor), Indiana, Virginia, Utah, Delaware, New Jersey (owner names redacted by law; deed date + price still shown) |
-| **County by county** | Michigan and Iowa have no statewide layer, so the map reads each county's own public parcel service where one exists: **39 of 83 Michigan counties** (8 cover only part of the county, such as one city) and **26 of 99 Iowa counties** (3 partial). Owner names everywhere, plus the latest sale in 13 counties. Layers not updated in over a year are labeled with their date on every parcel. The **About the data** window lists every county. |
+| **County by county** | Michigan and Iowa have no statewide layer, so the map reads each county's own public parcel service where one exists: **39 of 83 Michigan counties** (7 cover only part of the county, such as one city) and **26 of 99 Iowa counties** (3 partial). Owner names everywhere, plus the latest sale in 13 counties. Layers not updated in over a year are labeled with their date on every parcel. The **About the data** window lists every county. |
 | **Public land only** | Everywhere else, via USGS PAD-US, plus links to the county's records |
 
 Things to know:
 - **Texas** never discloses sale prices (it's a "non-disclosure" state). **New Jersey** and **Maryland** remove owner names from open data for privacy.
 - **California** and several other states restrict owner names at the county level, and many counties sell their data instead of publishing it. No free statewide parcel layer exists for those states.
+- **Oakland County, Michigan** leaves owner names out of its free parcel data. The map uses a copy of the county's parcel records that a 911 dispatch map shares publicly (as of May 2025), plus the City of Novi's own up-to-date layer. Owner names stay hidden on records the county marks as not for public view.
 - Tax rolls often lag behind deeds. When the deed records show a newer buyer than the tax roll, the map says so.
 - A full chain of title back to the original land grant only exists in county deed books. Most of those aren't online as open data, so the map links to the county recorder instead.
 - **This isn't a title search.** Public records can be wrong or out of date.
@@ -86,7 +87,7 @@ Things to know:
 
 **Asking a county for its data.** Contact the office that keeps the parcel map. In Michigan that's usually **Equalization** or **GIS**; in Iowa it's the **Auditor** or **Assessor**. Deed history lives with the **Register of Deeds** (MI) or **County Recorder** (IA). The easiest thing to add is a public map-service URL ending in `/FeatureServer/0` or `/MapServer/0` that includes owner names and allows cross-origin (CORS) requests. A downloaded file (shapefile or geodatabase) also works but becomes a frozen copy, so check the county allows it on a public website.
 
-**Simple county entries.** Counties in [`js/counties-mi-ia.js`](js/counties-mi-ia.js) are one line of data each: the service `url` plus which fields hold the owner, parcel ID, address, acres, and sale date/price (see `fromFieldMap()` in `js/sources.js`). Copy a line, change the URL, FIPS code and field names, and reload.
+**Simple county entries.** Counties in [`js/counties-mi-ia.js`](js/counties-mi-ia.js) are one line of data each: the service `url` plus which fields hold the owner, parcel ID, address, acres, and sale date/price (see `fromFieldMap()` in `js/sources.js`). Copy a line, change the URL, FIPS code and field names, and reload. A city's own layer can sit inside a county entry (`"area": "City of Novi", "inside": true`, listed before the county); it answers clicks there while the county layer draws the lines.
 
 **Full entries.** Every other data source is one entry in [`js/sources.js`](js/sources.js). Many counties publish an **ArcGIS REST** parcel layer (search the web for `"<county name> parcels FeatureServer"` or `"MapServer"`). To add one:
 

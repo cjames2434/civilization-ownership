@@ -737,17 +737,24 @@ function fromFieldMap(c) {
   const hasDate = !!(f.saleDate && f.saleDate.length);
   const hasSale = hasDate || (f.salePrice && f.salePrice.length);
   const by = c.publisher ? ` (published by ${c.publisher})` : '';
-  let note = hasSale
-    ? `Current owner and most recent sale from a public parcel service${by}.`
-    : `Current owner from a public parcel service${by}. No sale history is published there.`;
+  let note =
+    c.note ||
+    (hasSale
+      ? `Current owner and most recent sale from a public parcel service${by}.`
+      : `Current owner from a public parcel service${by}. No sale history is published there.`);
+  if (c.area) note += ` Used for ${c.area}; the rest of ${c.county} County uses the countywide layer.`;
   if (c.partial) note += ` This layer covers only part of ${c.county} County${c.partial === true ? '' : ` (${c.partial})`}.`;
   if (c.asOf) note += ` Its records are as of ${c.asOf}, so newer sales and owners may be missing.`;
+  const [hideField, hideValue] = f.hideOwnerIf || [];
   return {
     id: c.id,
-    name: `${c.county} County, ${stateName} parcels${c.partial ? ' (partial)' : ''}`,
+    name: `${c.area ? `${c.area}, ` : ''}${c.county} County, ${stateName} parcels${c.partial ? ' (partial)' : ''}`,
     publisher: c.publisher || `${c.county} County, ${stateName}`,
     homepage: c.home || c.url,
-    region: `${c.county} County, ${c.st}`,
+    region: `${c.area ? `${c.area}, ` : ''}${c.county} County, ${c.st}`,
+    // Short name for the About list: "Oakland", or "City of Novi" for a city layer inside a county.
+    label: c.area || c.county,
+    inside: !!c.inside,
     bbox: c.bbox,
     outline: c.outline,
     partial: c.partial || false,
@@ -774,8 +781,11 @@ function fromFieldMap(c) {
       });
       // A sale price with no date can't go on the timeline, so show it as a detail.
       if (!hasDate && f.salePrice) details.unshift(['Last sale price', S.money(first(a, f.salePrice))]);
+      // Records the county flags as not for public view keep their owner name hidden.
+      const hidden = hideField && String(a[hideField] ?? '').trim() === hideValue;
       return {
-        owners: S.owners(...(f.owner || []).map((k) => a[k])),
+        owners: hidden ? [] : S.owners(...(f.owner || []).map((k) => a[k])),
+        ownerNote: hidden ? 'The county marks this record as not for public view, so the owner’s name is hidden here.' : null,
         ownerLabel: f.ownerLabel || null,
         parcelId: U.clean(first(a, f.id, (v) => !GUID_RE.test(v))),
         address: addr && /[A-Za-z]/.test(addr) ? addr : null,
@@ -785,7 +795,7 @@ function fromFieldMap(c) {
         acres: acres || (sqft ? sqft / 43560 : null),
         acresLabel: acres || sqft ? 'county record' : null,
         sales: hasDate ? S.sales(S.sale(first(a, f.saleDate), first(a, f.salePrice), { sellers: S.owners(first(a, f.seller)) })) : [],
-        link: /^https?:\/\//i.test(linkVal) ? { url: linkVal, label: `${c.county} County property record` } : null,
+        link: /^https?:\/\//i.test(linkVal) ? { url: linkVal, label: f.linkLabel || `${c.county} County property record` } : null,
         details,
       };
     },

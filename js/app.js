@@ -50,7 +50,7 @@ const coverageLayer = L.geoJSON(window.US_STATES, {
   }),
   onEachFeature: (f, layer) => {
     const lv = stateLevel(f.properties.abbr);
-    const cities = SOURCES.filter((s) => s.counties && U.stateAt((s.bbox[0] + s.bbox[2]) / 2, (s.bbox[1] + s.bbox[3]) / 2)?.abbr === f.properties.abbr);
+    const cities = SOURCES.filter((s) => s.counties && !s.inside && U.stateAt((s.bbox[0] + s.bbox[2]) / 2, (s.bbox[1] + s.bbox[3]) / 2)?.abbr === f.properties.abbr);
     let extra = '';
     if (cities.length > 3) extra = `<br><em>Plus ${cities.length} counties with their own parcel data (shaded)</em>`;
     else if (cities.length) extra = `<br><em>Plus ${cities.map((c) => U.esc(c.region)).join(', ')}: ${LEVELS[cities[0].level].label.toLowerCase()}</em>`;
@@ -74,7 +74,7 @@ const countyCoverage = L.geoJSON(
 );
 
 const cityMarkers = L.layerGroup(
-  SOURCES.filter((s) => s.counties && !s.outline).map((s) =>
+  SOURCES.filter((s) => s.counties && !s.outline && !s.inside).map((s) =>
     L.circleMarker([(s.bbox[1] + s.bbox[3]) / 2, (s.bbox[0] + s.bbox[2]) / 2], {
       radius: 7,
       color: '#fff',
@@ -171,7 +171,8 @@ function visibleSources() {
   const b = map.getBounds();
   const view = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
   const z = map.getZoom();
-  return SOURCES.filter((s) => z >= s.minZoom && U.bboxIntersects(s.bbox, view));
+  // A city layer inside a county (inside: true) only answers clicks; the county layer draws the lines.
+  return SOURCES.filter((s) => z >= s.minZoom && !s.inside && U.bboxIntersects(s.bbox, view));
 }
 
 async function loadVector(src, signal) {
@@ -885,23 +886,30 @@ function renderAbout() {
       )
       .join('');
   // Counties described as data (Michigan, Iowa, …) are grouped into one row per state.
+  // A city layer inside a county (inside: true) is listed right after that county.
   const grouped = {};
-  for (const s of SOURCES.filter((x) => x.outline)) (grouped[s.region.split(', ').pop()] ||= []).push(s);
+  for (const s of SOURCES.filter((x) => x.outline || x.inside)) (grouped[s.region.split(', ').pop()] ||= []).push(s);
   const groupRows = Object.entries(grouped)
-    .map(([st, list]) => {
+    .map(([st, all]) => {
+      const list = all.filter((s) => !s.inside);
       const withSales = list.filter((s) => s.level === 'sales').length;
+      const link = (s) => `<a href="${h(s.homepage)}" target="_blank" rel="noopener" title="${h(s.publisher)}">${h(s.label || s.region.split(' County')[0])}</a>`;
       return `<tr>
         <td><span class="swatch" style="background:${LEVELS.owner.color}"></span>${h(U.stateName(st))}<div class="muted">${list.length} counties</div></td>
         <td>Each county’s own public parcel service: owner names${withSales ? `, plus the latest sale in ${withSales} of them` : ''}.
           <div class="countylist">${list
-            .map((s) => `<a href="${h(s.homepage)}" target="_blank" rel="noopener" title="${h(s.publisher)}">${h(s.region.split(' County')[0])}</a>${s.partial ? ' <span class="muted">(part)</span>' : ''}`)
+            .map((s) => {
+              const cities = all.filter((x) => x.inside && x.counties[0] === s.counties[0]);
+              const extra = cities.length ? ` <span class="muted">(+ ${cities.map(link).join(', ')})</span>` : '';
+              return `${link(s)}${s.partial ? ' <span class="muted">(part)</span>' : ''}${extra}`;
+            })
             .join(', ')}</div></td>
       </tr>`;
     })
     .join('');
   $('#sourceTable').innerHTML = `
     <thead><tr><th>Area</th><th>Source and what it includes</th></tr></thead>
-    <tbody>${rows((s) => s.counties && !s.outline)}${groupRows}${rows((s) => s.states)}</tbody>`;
+    <tbody>${rows((s) => s.counties && !s.outline && !s.inside)}${groupRows}${rows((s) => s.states)}</tbody>`;
   $('#legendAbout').innerHTML = Object.values(LEVELS)
     .map((l) => `<li><span class="swatch" style="background:${l.color}"></span>${h(l.label)}</li>`)
     .join('');
