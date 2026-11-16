@@ -760,7 +760,7 @@ function fromFieldMap(c) {
     partial: c.partial || false,
     asOf: c.asOf || null,
     counties: [c.fips],
-    level: hasSale ? 'sales' : 'owner',
+    level: c.level || (hasSale ? 'sales' : 'owner'),
     type: 'arcgis',
     url: c.url,
     note,
@@ -785,7 +785,7 @@ function fromFieldMap(c) {
       const hidden = hideField && String(a[hideField] ?? '').trim() === hideValue;
       return {
         owners: hidden ? [] : S.owners(...(f.owner || []).map((k) => a[k])),
-        ownerNote: hidden ? 'The county marks this record as not for public view, so the owner’s name is hidden here.' : null,
+        ownerNote: hidden ? 'The county marks this record as not for public view, so the owner’s name is hidden here.' : f.ownerNote || null,
         ownerLabel: f.ownerLabel || null,
         parcelId: U.clean(first(a, f.id, (v) => !GUID_RE.test(v))),
         address: addr && /[A-Za-z]/.test(addr) ? addr : null,

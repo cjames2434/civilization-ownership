@@ -893,15 +893,16 @@ function renderAbout() {
     .map(([st, all]) => {
       const list = all.filter((s) => !s.inside);
       const withSales = list.filter((s) => s.level === 'sales').length;
+      const linesOnly = list.filter((s) => s.level === 'lines').length;
       const link = (s) => `<a href="${h(s.homepage)}" target="_blank" rel="noopener" title="${h(s.publisher)}">${h(s.label || s.region.split(' County')[0])}</a>`;
       return `<tr>
         <td><span class="swatch" style="background:${LEVELS.owner.color}"></span>${h(U.stateName(st))}<div class="muted">${list.length} counties</div></td>
-        <td>Each county’s own public parcel service: owner names${withSales ? `, plus the latest sale in ${withSales} of them` : ''}.
+        <td>Each county’s own public parcel service: owner names${withSales ? `, plus the latest sale in ${withSales} of them` : ''}${linesOnly ? ` (${linesOnly === 1 ? 'one county has' : `${linesOnly} counties have`} property lines only)` : ''}.
           <div class="countylist">${list
             .map((s) => {
               const cities = all.filter((x) => x.inside && x.counties[0] === s.counties[0]);
               const extra = cities.length ? ` <span class="muted">(+ ${cities.map(link).join(', ')})</span>` : '';
-              return `${link(s)}${s.partial ? ' <span class="muted">(part)</span>' : ''}${extra}`;
+              return `${link(s)}${s.partial ? ' <span class="muted">(part)</span>' : ''}${s.level === 'lines' ? ' <span class="muted">(lines only)</span>' : ''}${extra}`;
             })
             .join(', ')}</div></td>
       </tr>`;

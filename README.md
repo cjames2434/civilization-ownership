@@ -70,7 +70,7 @@ Land records in the U.S. are kept by about 3,100 county offices, and each state 
 | **Owners + latest sale** | Massachusetts, Colorado, Minnesota (opt-in counties), North Carolina (sale date), Washington DC |
 | **Owner names** | Wisconsin, Texas, Florida, Montana, Vermont, Arkansas, Franklin County OH (Columbus) |
 | **Property lines only** | Washington State (links to county assessor), Indiana, Virginia, Utah, Delaware, New Jersey (owner names redacted by law; deed date + price still shown) |
-| **County by county** | Michigan and Iowa have no statewide layer, so the map reads each county's own public parcel service where one exists: **39 of 83 Michigan counties** (7 cover only part of the county, such as one city) and **26 of 99 Iowa counties** (3 partial). Owner names everywhere, plus the latest sale in 13 counties. Layers not updated in over a year are labeled with their date on every parcel. The **About the data** window lists every county. |
+| **County by county** | Michigan and Iowa have no statewide layer, so the map reads each county's own public parcel service where one exists: **40 of 83 Michigan counties** (7 cover only part of the county, such as one city) and **26 of 99 Iowa counties** (3 partial). Owner names everywhere except Sanilac County (property lines and parcel numbers only), plus the latest sale in 13 counties. Layers not updated in over a year are labeled with their date on every parcel. The **About the data** window lists every county. |
 | **Public land only** | Everywhere else, via USGS PAD-US, plus links to the county's records |
 
 Things to know:
